@@ -18,7 +18,7 @@ class EmailClient(object):
     @staticmethod
     def connect(self):
         # parse the server's hostname from email account
-        pop3_server = 'pop.'+self.email_account.split('@')[-1]
+        pop3_server = 'pop3s.'+self.email_account.split('@')[-1]
         server = poplib.POP3_SSL(pop3_server)
         # display the welcome info received from server,
         # indicating the connection is set up properly
