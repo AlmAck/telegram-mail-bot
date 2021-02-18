@@ -1,9 +1,11 @@
 import logging
 import os
 import sys
+import re
 from telegram import ParseMode, Update
 from telegram.constants import MAX_MESSAGE_LENGTH
-from telegram.ext import (Updater, CommandHandler, CallbackContext)
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
+from telegram.messageentity import MessageEntity
 from utils.client import EmailClient
 
 
@@ -44,7 +46,7 @@ def _help(update: Update, context: CallbackContext) -> None:
     if not is_owner(update):
         return
     """Send a message when the command /help is issued."""
-    help_str = """邮箱设置:
+    help_str = """Help:
 /setting john.doe@example.com password
 /inbox
 /get mail_index
@@ -60,9 +62,10 @@ def _help(update: Update, context: CallbackContext) -> None:
 def setting_email(update: Update, context: CallbackContext) -> None:
     if not is_owner(update):
         return
-    global email_addr, email_passwd, inbox_num
+    global email_addr, email_passwd, message_dict, inbox_num
     email_addr = context.args[0]
     email_passwd = context.args[1]
+    message_dict = {}
     logger.info("received setting_email command.")
     update.message.reply_text("Configure email success!")
     with EmailClient(email_addr, email_passwd) as client:
@@ -81,8 +84,9 @@ def periodic_task(context: CallbackContext) -> None:
             mail = client.get_mail_by_index(new_inbox_num)
             content = mail.__repr__()
             for text in handle_large_text(content):
-                context.bot.send_message(context.job.context,
+                message = context.bot.send_message(context.job.context,
                                 text=text)
+                message_dict[message.message_id] = new_inbox_num
             inbox_num = new_inbox_num
 
 def inbox(update: Update, context: CallbackContext) -> None:
@@ -97,9 +101,10 @@ def inbox(update: Update, context: CallbackContext) -> None:
                      " time you checked." % \
                      (new_num, new_num - inbox_num)
         inbox_num = new_num
-        context.bot.send_message(update.message.chat_id,
+        message = context.bot.send_message(update.message.chat_id,
                         parse_mode=ParseMode.MARKDOWN,
                         text=reply_text)
+        #message_dict[message.message_id] = new_num
 
 def get_email(update: Update, context: CallbackContext) -> None:
     if not is_owner(update):
@@ -112,6 +117,19 @@ def get_email(update: Update, context: CallbackContext) -> None:
         for text in handle_large_text(content):
             context.bot.send_message(update.message.chat_id,
                              text=text)
+
+def reply(update: Update, context: CallbackContext) -> None:
+    # if empty return, send messages only if the message is a reply from the original
+    if not update.message.reply_to_message:
+        return
+
+    # Read the original message
+    num_original_msg = message_dict[update.message.reply_to_message.message_id]
+
+    with EmailClient(email_addr, email_passwd) as client:
+        mail = client.get_mail_by_index(num_original_msg)
+        client.send_mail(mail.sender, mail.subject, update.message.text)
+
 
 def main():
     # Create the EventHandler and pass it your bot's token.
@@ -133,8 +151,9 @@ def main():
 
     dp.add_handler(CommandHandler("get", get_email))
 
-
     dp.add_error_handler(error)
+
+    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, reply))
 
     # Start the Bot
     updater.start_polling()

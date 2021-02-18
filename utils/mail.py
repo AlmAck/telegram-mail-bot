@@ -3,7 +3,7 @@ from pyzmail import PyzMessage, decode_text
 class Email(object):
     def __init__(self, raw_mail_lines):
         msg_content = b'\r\n'.join(raw_mail_lines)
-        msg =  PyzMessage.factory(msg_content)
+        msg = PyzMessage.factory(msg_content)
 
         self.subject = msg.get_subject()
         self.sender = msg.get_address('from')

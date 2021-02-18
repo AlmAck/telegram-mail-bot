@@ -1,6 +1,8 @@
 import logging
 import poplib
+from smtplib import SMTP_SSL, SMTP_SSL_PORT
 from utils.mail import Email
+from email.message import EmailMessage
 
 
 logger = logging.getLogger(__name__)
@@ -37,6 +39,21 @@ class EmailClient(object):
     def get_mail_by_index(self, index):
         resp_status, mail_lines, mail_octets = self.server.retr(index)
         return Email(mail_lines)
+
+    def send_mail(self, to_emails, subject, text):
+        email_message = EmailMessage()
+        email_message.add_header('To', ', '.join(to_emails))
+        email_message.add_header('From', self.email_account)
+        email_message.add_header('Subject', subject)
+        #email_message.add_header('X-Priority', '1')  # Urgency, 1 highest, 5 lowest
+        email_message.set_content(text)
+
+        # Connect, authenticate, and send mail
+        smtp_server_name = 'smtpauths.'+self.email_account.split('@')[-1]
+        smtp_server = SMTP_SSL(smtp_server_name, port=SMTP_SSL_PORT)
+        smtp_server.set_debuglevel(1)  # Show SMTP server interactions
+        smtp_server.login(self.email_account, self.password)
+        smtp_server.sendmail(self.email_account, to_emails, email_message.as_bytes())
 
     def __enter__(self):
         return self
